@@ -1,4 +1,6 @@
-#include "../include/customWidget.h"
+#include <spdlog.hpp>
+#include <QIcon>
+#include "custom_widget.hpp"
 
 CustomWidget::CustomWidget(const QString &text, QWidget *parent) : QWidget(parent) {
     layout = new QHBoxLayout(this);
@@ -25,6 +27,7 @@ void CustomWidget::setIconLabelFixedLengthWidth(int length, int width) {
 }
 void CustomWidget::setIconSize(const QIcon &icon, int length, int width) {
     iconLabel->setPixmap(icon.pixmap(35, 35));
+    LOG_INFO("length={}, width={}", length, width);
 }
 void CustomWidget::setTextLabelContentsMargins(int left, int top, int right, int bottom) {
     textLabel->setContentsMargins(left, top, right, bottom);

@@ -1,4 +1,4 @@
-#include "../include/loginWindow.h"
+#include "login_window.hpp"
 
 int main(int argc, char *argv[])
 {

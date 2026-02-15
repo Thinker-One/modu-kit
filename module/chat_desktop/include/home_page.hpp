@@ -2,17 +2,11 @@
 #define HOMEPAGE_H
 
 #include <QMainWindow>
-#include <QMenuBar>
-#include <QToolBar>
-#include <QStatusBar>
-#include <QTextEdit>
 #include <QSplitter>
 #include <QListWidget>
-#include <QDateTime>
-
-#include "common.h"
-#include "customWidget.h"
-#include "chatWindow.h"
+#include <QStackedWidget>
+#include "custom_widget.hpp"
+#include "chat_window.hpp"
 
 class HomePage : public QMainWindow {
     Q_OBJECT

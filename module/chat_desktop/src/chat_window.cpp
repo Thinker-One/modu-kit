@@ -1,4 +1,5 @@
-#include "../include/chatWindow.h"
+#include <spdlog.hpp>
+#include "chat_window.hpp"
 
 ChatWindow::ChatWindow(const QString &text, QWidget *parent) : QWidget(parent) {
     initChatWindow(text);
@@ -28,5 +29,5 @@ void ChatWindow::connectSignals() {
 }
 
 void ChatWindow::sendMessage() {
-    qDebug() << "发送消息";
+    LOG_DEBUG("发送消息");
 }

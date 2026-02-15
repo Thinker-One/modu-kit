@@ -3,7 +3,9 @@
 
 #include <QTextEdit>
 #include <QHBoxLayout>
-#include "common.h"
+#include <QPushButton>
+#include <QLineEdit>
+
 
 class ChatWindow : public QWidget
 {

@@ -4,10 +4,10 @@
 #include <QWidget>
 #include <QPushButton>
 #include <QLabel>
-#include <QMessageBox>
+#include <QDialog>
+#include <QApplication>
+#include "home_page.hpp"
 
-#include "common.h"
-#include "homePage.h"
 
 class LoginWindow : public QDialog {
     Q_OBJECT

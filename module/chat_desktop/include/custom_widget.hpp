@@ -1,6 +1,10 @@
 #ifndef CUSTOMWIDGET_H
 #define CUSTOMWIDGET_H
-#include "common.h"
+
+#include <QWidget>
+#include <QLabel>
+#include <QHBoxLayout>
+
 
 class CustomWidget : public QWidget {
 

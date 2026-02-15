@@ -1,7 +1,9 @@
-// mainwindow.cpp
-#include "../include/loginWindow.h"
+#include <QMessageBox>
+#include <spdlog.hpp>
+#include "login_window.hpp"
 
-LoginWindow::LoginWindow(QWidget *parent) : chatWindow(new HomePage), QDialog(parent) {
+LoginWindow::LoginWindow(QWidget *parent) : QDialog(parent), chatWindow(new HomePage)
+{
     setupLoginUI();
     connectSignals();
 }
@@ -83,7 +85,7 @@ void LoginWindow::connectSignals() {
 void LoginWindow::login(QApplication &app) {
 
     chatWindow->show();
-
+    app.setApplicationVersion("1.0.0");
     // if (this->exec() == QDialog::Accepted) {
     //     chatWindow->show();
     // } else {

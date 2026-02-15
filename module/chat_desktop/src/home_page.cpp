@@ -1,14 +1,13 @@
-#include "../include/homePage.h"
+#include <QDateTime>
+#include "home_page.hpp"
 
-HomePage::HomePage(QWidget *parent) : QMainWindow(parent) {
-
+HomePage::HomePage(QWidget *parent) : QMainWindow(parent)
+{
     setHomePage();
     connectSignals();
 }
 
-HomePage::~HomePage() {
-
-}
+HomePage::~HomePage() {}
 
 void HomePage::setHomePage() {
 
