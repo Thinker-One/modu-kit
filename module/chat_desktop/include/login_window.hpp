@@ -6,7 +6,7 @@
 #include <QLabel>
 #include <QDialog>
 #include <QApplication>
-#include "home_page.hpp"
+#include "homepage.hpp"
 
 
 class LoginWindow : public QDialog {

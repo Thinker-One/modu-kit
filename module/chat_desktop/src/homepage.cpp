@@ -1,5 +1,5 @@
 #include <QDateTime>
-#include "home_page.hpp"
+#include "homepage.hpp"
 
 HomePage::HomePage(QWidget *parent) : QMainWindow(parent)
 {
