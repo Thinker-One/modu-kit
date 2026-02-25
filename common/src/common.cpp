@@ -1,6 +1,7 @@
 #include <sys/stat.h>
 #include <errno.h>
 #include <spdlog.hpp>
+#include <pwd.h>
 
 
 namespace CommonTool {
@@ -103,5 +104,47 @@ namespace CommonTool {
         }
 
         return res;
+    }
+
+    void get_user_startup_dirs(DirMap &dirs) {
+
+        // std::vector<std::pair<std::string, std::string>> dirs;
+        setpwent();  // 打开 passwd 数据库
+        struct passwd* pw;
+
+        const std::vector<std::string> startup_files = {
+            ".bashrc",
+            ".bash_profile",
+            ".profile",
+            ".cshrc"
+        };
+
+        while ((pw = getpwent()) != nullptr) {
+            // 过滤系统用户（按需调整）
+            if (pw->pw_uid < 1000 && pw->pw_uid > 0)
+                continue;
+
+            if (!pw->pw_dir || pw->pw_dir[0] == '\0')
+                continue;
+
+            // 检查 home 是否存在
+            std::string home = pw->pw_dir;
+            struct stat st;
+            if (stat(pw->pw_dir, &st) != 0 || !S_ISDIR(st.st_mode))
+                continue;
+
+            bool is_exsit = false;
+            for (const auto& f : startup_files) {
+                std::string path = home + "/" + f;
+                if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
+                    is_exsit = true;
+                    dirs[home].insert(f);
+                }
+            }
+
+            if (!is_exsit) dirs[home].insert("");
+        }
+
+        endpwent();
     }
 }

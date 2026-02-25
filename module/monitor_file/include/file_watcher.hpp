@@ -15,7 +15,24 @@
 class FileWatcher {
 public:
     using Callback = std::function<void(std::chrono::steady_clock::time_point, const std::string &)>;
-    using DirMap = std::vector<std::pair<std::string, std::string>>;
+    using DirMap = std::unordered_map<std::string, std::unordered_set<std::string>>;
+    enum class FileType {
+        REGULAR_FILE,
+        DIRECTORY,
+        SYMLINK,
+        BLOCK_DEVICE,
+        CHARACTER_DEVICE,
+        FIFO,
+        SOCKET,
+        UNKNOWN,
+        NOT_EXIST
+    };
+
+    struct MonObjInfo {
+        std::string name;
+        FileType type;
+    };
+
     FileWatcher();
     ~FileWatcher();
     bool init();
@@ -30,13 +47,13 @@ private:
     void run();
     bool is_vim_noise(const std::string& filename);
     void get_inotify_dir();
+    uint32_t get_event_mask(const FileType type);
     void handle_event(std::chrono::steady_clock::time_point now, const std::string &str);
-    void get_user_startup_dirs();
     bool is_monitor_obj(std::string dir, std::string filename);
 
 private:
     int inotify_fd_;
-    std::unordered_map<int, std::string> watch_descs_;
+    std::unordered_map<int, MonObjInfo> watch_descs_;
     std::unordered_set<std::string> already_inotify_dirs_;
     std::atomic<bool> running_;
     std::thread watch_thread_;

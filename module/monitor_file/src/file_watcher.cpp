@@ -1,6 +1,5 @@
 #include <sys/inotify.h>
 #include <spdlog.hpp>
-#include <pwd.h>
 #include "file_watcher.hpp"
 
 FileWatcher::FileWatcher() :
@@ -34,31 +33,55 @@ bool FileWatcher::init() {
         return false;
     }
 
-    for (auto &it : dirs_) {
-        if (!already_inotify_dirs_.count(it.first)) {
-            already_inotify_dirs_.emplace(it.first);
-        } else {
-            continue;
-        }
-        LOG_INFO("新增监控路径, DIR = {}", it.first);
-        int wd = inotify_add_watch (
-            inotify_fd_,
-            it.first.c_str(),
-            IN_CLOSE_WRITE | IN_MOVED_TO | IN_MOVED_FROM | IN_CREATE | IN_DELETE | IN_ATTRIB
-        );
+    FileType type;
+    std::string monitor_obj;
 
-        if (wd < 0) {
-            LOG_ERROR("inotify_add_watch failed, dir={}", it.first);
-            continue;
+    for (auto &it : dirs_) {
+        for (auto &fname : it.second) {
+            if (fname.empty()) {
+                type = FileType::DIRECTORY;
+                monitor_obj = it.first;
+                LOG_INFO("新增监控路径, DIR = {}", it.first);
+            } else {
+                type = FileType::REGULAR_FILE;
+                monitor_obj = it.first + "/" + fname;
+                LOG_INFO("新增监控文件, FILE = {}", monitor_obj);
+            }
+            
+            int wd = inotify_add_watch (
+                inotify_fd_,
+                monitor_obj.c_str(),
+                get_event_mask(type)
+            );
+
+            if (wd < 0) {
+                LOG_ERROR("inotify_add_watch failed, monitor_obj={}", monitor_obj);
+                continue;
+            }
+            watch_descs_[wd] = {monitor_obj, type};
         }
-        watch_descs_.emplace(wd, it.first);
     }
 
     return true;
 }
 
+uint32_t FileWatcher::get_event_mask(const FileType type) {
+    switch (type) {
+        case FileType::REGULAR_FILE: {
+            return IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF;
+        }
+
+        case FileType::DIRECTORY: {
+            return IN_CREATE | IN_DELETE | IN_MOVED_FROM | IN_MOVED_TO | IN_CLOSE_WRITE | IN_ATTRIB | IN_MODIFY;
+        }
+
+        default: {
+            return 0;
+        }
+    }
+}
+
 int FileWatcher::start() {
-    // print_inotify_dir_info();
     watch_thread_ = std::thread(&FileWatcher::run, this);
     return 0;
 }
@@ -135,12 +158,28 @@ void FileWatcher::run() {
 
         for (ssize_t i = 0; i < len; ) {
             auto* ev = reinterpret_cast<inotify_event*>(&buffer[i]);
-            if (ev->len && !is_vim_noise(ev->name) && is_monitor_obj(watch_descs_[ev->wd] ,ev->name)) {
-                if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_MOVED_FROM | IN_CREATE | IN_DELETE)) {
-                    handle_event(now, ev->name);
+            if (ev->len && !is_vim_noise(ev->name)) {
+                switch (watch_descs_[ev->wd].type) {
+                    case FileType::REGULAR_FILE: {
+                        if (ev->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF)) {
+                            handle_event(now, ev->name);
+                        }
+                        break;
+                    }
+
+                    case FileType::DIRECTORY: {
+                        if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_MOVED_FROM | IN_CREATE | IN_DELETE | IN_MODIFY | IN_ATTRIB)) {
+                            handle_event(now, ev->name);
+                        }
+                        break;
+                    }
+
+                    default: {
+                        LOG_WARN("未知的文件类型");
+                    }
                 }
+                i += sizeof(inotify_event) + ev->len;
             }
-            i += sizeof(inotify_event) + ev->len;
         }
     }
 }
@@ -170,19 +209,10 @@ void FileWatcher::handle_event(std::chrono::steady_clock::time_point now, const 
 
 void FileWatcher::get_inotify_dir() {
     std::vector<std::string> dirs = {
-        "/etc",
         "/etc/crontab",
         "/etc/cron.d",
         "/var/spool/cron/crontabs",
-        "/etc/init.d",
         "/etc/rc.d",
-        "/etc/rc0.d",
-        "/etc/rc1.d",
-        "/etc/rc2.d",
-        "/etc/rc3.d",
-        "/etc/rc4.d",
-        "/etc/rc5.d",
-        "/etc/rc6.d",
         "/etc/rc.local",
         "/etc/rc.d/rc0.d",
         "/etc/rc.d/rc1.d",
@@ -199,73 +229,19 @@ void FileWatcher::get_inotify_dir() {
         if (info.type == CommonTool::PathType::REGULAR_FILE) {
             std::pair<std::string, std::string> new_dir;
             split_path(info.real_path, new_dir.first, new_dir.second);
-            bool found = false;
-            for (auto &it : dirs_) {
-                if (it.first == new_dir.first && it.second == new_dir.second) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) dirs_.push_back(new_dir);
+            dirs_[new_dir.first].insert(new_dir.second);
         } else if (info.type == CommonTool::PathType::DIRECTORY) {
-            bool found = false;
-            for (auto &it : dirs_) {
-                if (it.first == info.real_path) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) dirs_.push_back({info.real_path, ""});
+            dirs_[info.real_path].insert("");
         }
     }
 
-    get_user_startup_dirs();
+    CommonTool::get_user_startup_dirs(dirs_);
 }
 
 void FileWatcher::print_inotify_dir_info() {
     for (auto &it : dirs_) {
-        LOG_INFO("dir={}, filename={}", it.first, it.second);
-    }
-}
-
-void FileWatcher::get_user_startup_dirs() {
-
-    std::vector<std::pair<std::string, std::string>> dirs;
-    setpwent();  // 打开 passwd 数据库
-    struct passwd* pw;
-
-    const std::vector<std::string> startup_files = {
-        ".bashrc",
-        ".bash_profile",
-        ".profile",
-        ".cshrc"
-    };
-
-    while ((pw = getpwent()) != nullptr) {
-        // 过滤系统用户（按需调整）
-        if (pw->pw_uid < 1000 && pw->pw_uid > 0)
-            continue;
-
-        if (!pw->pw_dir || pw->pw_dir[0] == '\0')
-            continue;
-
-        // 检查 home 是否存在
-        std::string home = pw->pw_dir;
-        struct stat st;
-        if (stat(pw->pw_dir, &st) != 0 || !S_ISDIR(st.st_mode))
-            continue;
-
-        bool is_exsit = false;
-        for (const auto& f : startup_files) {
-            std::string path = home + "/" + f;
-            if (stat(path.c_str(), &st) == 0 && S_ISREG(st.st_mode)) {
-                is_exsit = true;
-                dirs_.push_back({home, f});
-            }
+        for (auto &fname : it.second) {
+            LOG_INFO("dir={}, filename={}", it.first, fname);
         }
-
-        if (!is_exsit) dirs_.push_back({home, ""});
     }
-
-    endpwent();
 }
