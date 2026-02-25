@@ -48,7 +48,8 @@ private:
     bool is_vim_noise(const std::string& filename);
     void get_inotify_dir();
     uint32_t get_event_mask(const FileType type);
-    void handle_event(std::chrono::steady_clock::time_point now, const std::string &str);
+    void handle_event_dir(std::chrono::steady_clock::time_point now, const std::string &str);
+    void handle_event_file(std::chrono::steady_clock::time_point now, int wd);
     bool is_monitor_obj(std::string dir, std::string filename);
 
 private:

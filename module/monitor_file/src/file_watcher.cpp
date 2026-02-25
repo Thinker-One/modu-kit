@@ -137,7 +137,7 @@ bool FileWatcher::is_vim_noise(const std::string& filename) {
 
 void FileWatcher::run() {
 
-    char buffer[MAX_BUFFER_SIZE];
+    alignas(inotify_event) char buffer[MAX_BUFFER_SIZE];
 
     while (running_) {
         fd_set rfds;
@@ -146,7 +146,13 @@ void FileWatcher::run() {
 
         timeval tv{1, 0};
         int ret = select(inotify_fd_ + 1, &rfds, nullptr, nullptr, &tv);
-        if (ret <= 0) continue;
+        if (ret < 0) {
+            if (errno == EINTR) continue;
+            LOG_ERROR("select 失败");
+            break;
+        }
+        if (ret == 0) continue;
+
 
         ssize_t len = read(inotify_fd_, buffer, sizeof(buffer));
         if (len < 0) {
@@ -157,19 +163,27 @@ void FileWatcher::run() {
         auto now = std::chrono::steady_clock::now();
 
         for (ssize_t i = 0; i < len; ) {
+            if (i + (ssize_t)sizeof(inotify_event) > len) break;
             auto* ev = reinterpret_cast<inotify_event*>(&buffer[i]);
-            if (ev->len && !is_vim_noise(ev->name)) {
-                switch (watch_descs_[ev->wd].type) {
+            if (i + (ssize_t)sizeof(inotify_event) + (ssize_t)ev->len > len) break;
+
+            auto it = watch_descs_.find(ev->wd);
+            if (it == watch_descs_.end()) {
+                LOG_WARN("未知的 watch descriptor");
+            } else {
+                switch (it->second.type) {
                     case FileType::REGULAR_FILE: {
                         if (ev->mask & (IN_MODIFY | IN_ATTRIB | IN_CLOSE_WRITE | IN_DELETE_SELF | IN_MOVE_SELF)) {
-                            handle_event(now, ev->name);
+                            handle_event_file(now ,ev->wd);
                         }
                         break;
                     }
 
                     case FileType::DIRECTORY: {
-                        if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_MOVED_FROM | IN_CREATE | IN_DELETE | IN_MODIFY | IN_ATTRIB)) {
-                            handle_event(now, ev->name);
+                        if (ev->len && !is_vim_noise(ev->name)) {
+                            if (ev->mask & (IN_CLOSE_WRITE | IN_MOVED_TO | IN_MOVED_FROM | IN_CREATE | IN_DELETE | IN_MODIFY | IN_ATTRIB)) {
+                                handle_event_dir(now, ev->name);
+                            }
                         }
                         break;
                     }
@@ -178,8 +192,8 @@ void FileWatcher::run() {
                         LOG_WARN("未知的文件类型");
                     }
                 }
-                i += sizeof(inotify_event) + ev->len;
             }
+            i += sizeof(inotify_event) + ev->len;
         }
     }
 }
@@ -196,7 +210,7 @@ bool FileWatcher::is_monitor_obj(std::string dir, std::string filename) {
     return true;
 }
 
-void FileWatcher::handle_event(std::chrono::steady_clock::time_point now, const std::string &str) {
+void FileWatcher::handle_event_dir(std::chrono::steady_clock::time_point now, const std::string &str) {
 
     std::lock_guard<std::mutex> lock(mutex_);
     if (now - last_trigger_time_ < std::chrono::milliseconds(500)) {
@@ -205,6 +219,15 @@ void FileWatcher::handle_event(std::chrono::steady_clock::time_point now, const 
 
     last_trigger_time_ = now;
     LOG_WARN("文件变动:={}", str);
+}
+
+void FileWatcher::handle_event_file(std::chrono::steady_clock::time_point now, int wd) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (now - last_trigger_time_ < std::chrono::milliseconds(500)) {
+        return;
+    }
+    last_trigger_time_ = now;
+    LOG_WARN("文件变动:={}", watch_descs_[wd].name);
 }
 
 void FileWatcher::get_inotify_dir() {
