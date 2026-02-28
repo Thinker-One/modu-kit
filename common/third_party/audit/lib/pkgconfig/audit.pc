@@ -1,0 +1,11 @@
+prefix=/root/zhn/audit-userspace-2.8/local_install
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libaudit
+Description: Libraries needed for apps that use the kernel audit framework
+Version: 2.8
+Libs: -L${libdir} -laudit
+Libs.private: 
+Cflags: -I${includedir}
